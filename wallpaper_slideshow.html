@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Wallpaper Slideshow</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #slideshow {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: 0;
+    }
+
+    #fade {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 1;
+      transition: opacity 1.2s ease-in-out;
+    }
+  </style>
+</head>
+<body>
+  <div id="slideshow"></div>
+  <div id="fade"></div>
+
+  <script>
+    let images = [];
+    let index = 0;
+    let interval = null;
+    let paused = false;
+    let transitioning = false;
+
+    const slideshow = document.getElementById("slideshow");
+    const fade = document.getElementById("fade");
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    async function fetchImages() {
+      try {
+        const res = await fetch("http://localhost:8000/images");
+        const list = await res.json();
+        if (!list.length) throw new Error("Image list is empty");
+        images = shuffle(list.map(name => `Wallpapers/${name}`));
+        index = 0;
+        await showImage(index);
+        interval = setInterval(() => nextImage(), 10000);
+      } catch (e) {
+        console.error("Error fetching images:", e);
+      }
+    }
+
+    async function preloadImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(url);
+        img.onerror = reject;
+        img.src = url;
+      });
+    }
+
+    async function showImage(i) {
+      if (transitioning || !images.length) return;
+      transitioning = true;
+
+      const url = `http://localhost:8000/${encodeURIComponent(images[i])}`;
+      console.log("Preloading image:", url);
+
+      try {
+        await preloadImage(url); // ⬅ wait BEFORE fade starts
+      } catch (err) {
+        console.error("Failed to load image:", url, err);
+        transitioning = false;
+        return;
+      }
+
+      // Now fade to black (after preload)
+      fade.style.opacity = 1;
+      await new Promise(r => setTimeout(r, 600));
+
+      // Set background image safely
+      slideshow.style.backgroundImage = `url("${url}")`;
+
+      // Fade in
+      fade.style.opacity = 0;
+      await new Promise(r => setTimeout(r, 600));
+      transitioning = false;
+    }
+
+    function nextImage() {
+      if (!paused && !transitioning) {
+        index = (index + 1) % images.length;
+        showImage(index);
+      }
+    }
+
+    function prevImage() {
+      if (!paused && !transitioning) {
+        index = (index - 1 + images.length) % images.length;
+        showImage(index);
+      }
+    }
+
+    // Pause on hover
+    document.addEventListener("mouseenter", () => paused = true);
+    document.addEventListener("mouseleave", () => paused = false);
+
+    // Click to change image
+    document.addEventListener("click", (e) => {
+      if (transitioning) return;
+      if (e.clientX < window.innerWidth / 2) {
+        prevImage();
+      } else {
+        nextImage();
+      }
+    });
+
+    fetchImages();
+  </script>
+</body>
+</html>
